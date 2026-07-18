@@ -1,4 +1,4 @@
-"""Baby Subtitles MVP API.
+"""Minibanter MVP API.
 
 This local implementation deliberately uses curated, fictional subtitle templates.
 A production adapter can replace the generator with OpenAI Realtime/Vision while
@@ -96,7 +96,7 @@ def generate_fictional_subtitle(mood: str, personality: Personality) -> str:
 
 
 app = FastAPI(
-    title="Baby Subtitles API",
+    title="Minibanter API",
     version="0.1.0",
     description="Fictional, family-friendly video subtitle generation for entertainment.",
 )

@@ -1,8 +1,8 @@
-# Baby Subtitles MVP Architecture
+# Minibanter MVP Architecture
 
 ## Product boundary
 
-Baby Subtitles creates **fictional captions** for entertainment and memory creation. It does not translate a baby, diagnose emotions, or provide medical, parenting, health, sleep, feeding, or developmental guidance.
+Minibanter creates **fictional captions** for entertainment and memory creation. It does not translate a baby, diagnose emotions, or provide medical, parenting, health, sleep, feeding, or developmental guidance.
 
 ## Target system
 

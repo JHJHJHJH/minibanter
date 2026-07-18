@@ -27,9 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Baby Subtitles uses the camera to record family videos with fictional caption overlays.</string>
+	<string>Minibanter uses the camera to record family videos with fictional caption overlays.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Baby Subtitles uses the microphone to record the original audio with your family video.</string>
+	<string>Minibanter uses the microphone to record the original audio with your family video.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
