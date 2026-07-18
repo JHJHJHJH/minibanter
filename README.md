@@ -1,60 +1,119 @@
-# Baby Subtitles
+# Minibanter
 
-**Baby Subtitles** turns baby-video moments into humorous, heartwarming keepsakes with fictional live captions. It is a camera-first product for entertainment and memory creation — **not a baby translator or an advice tool**.
+**Minibanter** turns family-video moments into humorous, heartwarming keepsakes with short, fictional captions. It is a camera-first entertainment and memory-creation product — **not a baby translator, monitor, health tool, diagnostic tool, or parenting/advice product**.
 
-## MVP included
+## Safety boundary
 
-This repository currently contains the tested FastAPI foundation for the mobile client:
+All captions must be fictional, family-friendly, and entertainment-only. Minibanter must never claim to infer or translate what a baby thinks, feels, needs, or means. It must not provide medical, developmental, health, feeding, sleep, or parenting guidance.
 
-- Recording-session creation with personality, language, and parent-selected regional style
-- Curated, short, family-friendly fictional subtitle generation
-- Explicit entertainment disclaimer and per-caption safety notice
-- Safety guard rejecting medical, parenting, and diagnostic request contexts
-- Local PostgreSQL and MinIO development services via Docker Compose
-- A tested Flutter camera experience with live device-camera integration, personality/language/style selection, recording state, readable fictional subtitle overlay, and a typed API client
+Parents explicitly choose personality, subtitle language, and optional regional style. The application never infers those attributes from a child or video.
 
-Subtitle burn-in/export and sharing, live OpenAI Realtime/Vision adapters, authentication, persistent database repositories, and MP4 export remain intentionally planned next rather than falsely represented as complete.
+## Current status
 
-## Run the API locally
+- FastAPI recording-session and fictional-caption safety contracts are implemented and tested.
+- Flutter supports parent-selected personality/language/style, recording-session startup, camera capture, upload/export UI, and explicit recoverable errors.
+- `mobile/packages/minibanter_compositor` is a first-party native compositor plugin using Pigeon-generated Dart/Kotlin/Swift bindings.
+- The target architecture is native Camera2/EGL/MediaCodec on Android and AVFoundation/Metal/AVAssetWriter on iOS.
+- Android native capture/encoder composition is **in development** and must not be considered device-verified yet.
+- The existing backend FFmpeg renderer is transitional. The intended final flow is native-composited MP4 → backend validation/storage/delivery unchanged, with no FFmpeg fallback.
 
-Requires Python 3.11+.
+See [AGENTS.md](AGENTS.md) for the detailed engineering context and contributor workflow.
+
+## Repository layout
+
+```text
+app/                                      FastAPI application and safety/export contracts
+tests/                                    Python test suite
+mobile/                                   Flutter application
+mobile/packages/minibanter_compositor/    Native-compositor Flutter plugin
+pigeons/                                  Typed Pigeon compositor contract (inside plugin)
+docker-compose.yml                        Local PostgreSQL and MinIO development services
+```
+
+## Windows Android workflow
+
+Android Studio, the Android SDK, emulators, USB-device debugging, and Android builds should run from **Windows**, using a Windows Flutter SDK and a Windows checkout (for example `C:\src\minibanter`).
+
+### Prerequisites
+
+Install through Android Studio SDK Manager:
+
+- Android SDK Platform (API 35 or newer)
+- Build-Tools
+- Platform-Tools
+- Command-line Tools
+- Android Emulator and a Google APIs system image
+
+Then, in Windows PowerShell:
+
+```powershell
+flutter config --android-sdk "$env:LOCALAPPDATA\Android\Sdk"
+flutter doctor --android-licenses
+flutter doctor -v
+```
+
+### Run on an emulator
+
+Start the FastAPI service from WSL:
 
 ```bash
+cd ~/projects/minibanter
 python -m pip install -e '.[dev]'
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Then open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) or check:
+Then, from Windows PowerShell:
 
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-## Test
-
-```bash
-pytest -q
-```
-
-## Run the mobile prototype
-
-Start the API in one terminal:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-Then start Flutter in another terminal:
-
-```bash
-cd mobile
+```powershell
+cd C:\src\minibanter\mobile
 flutter pub get
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
-The app creates a recording session through the API before entering recording mode, then uses the device camera to capture video. The backend can accept an MP4 body at `POST /v1/recording-sessions/{session_id}/exports?caption=...`, burn the short fictional caption into it with FFmpeg, and return a download URL. For an Android emulator or physical device, `localhost` refers to that device: supply a reachable host address through `API_BASE_URL` instead.
+`10.0.2.2` addresses the Windows host from an Android emulator. For a physical phone, use the Windows machine's LAN address instead of `localhost` or `10.0.2.2`.
 
-For a physical Android device, install the Android SDK/Android Studio first; `flutter doctor` currently reports that the Android SDK is not present in this WSL environment.
+The native-compositor path is intentionally opt-in while it is being built:
+
+```powershell
+flutter run `
+  --dart-define=USE_NATIVE_COMPOSITOR=true `
+  --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+Do not use that flag as proof of native camera/MP4 success until the Android Camera2/EGL/MediaCodec graph has been built and exercised on an emulator/device.
+
+## Development checks
+
+### Flutter application
+
+```powershell
+cd C:\src\minibanter\mobile
+flutter test
+flutter analyze
+flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+### Compositor plugin
+
+```powershell
+cd C:\src\minibanter\mobile\packages\minibanter_compositor
+flutter test
+flutter analyze
+```
+
+After changing the Pigeon source contract:
+
+```powershell
+dart run pigeon --input pigeons/compositor_api.dart
+```
+
+### Backend
+
+```bash
+cd ~/projects/minibanter
+pytest -q
+python -m compileall -q app
+```
 
 ## Local supporting services
 
@@ -67,17 +126,4 @@ docker compose up -d postgres minio
 - MinIO API: `localhost:9000`
 - MinIO Console: [http://localhost:9001](http://localhost:9001)
 
-The development credentials in `.env.example` are only for local use; replace them outside development.
-
-## Product safety boundary
-
-All generated captions must be fictional, family-friendly, and entertainment-only. The product must never offer or imply medical, parenting, diagnostic, developmental, health, feeding, or sleep guidance. Parents select language and regional style; the app never infers identity attributes.
-
-## Repository layout
-
-```text
-app/               FastAPI application and subtitle safety contract
-tests/             API behavior tests
-docs/              Product architecture and implementation roadmap
-docker-compose.yml Local PostgreSQL and MinIO services
-```
+`.env.example` is local-development-only. Do not commit real credentials, signing keys, media recordings, or generated build output.

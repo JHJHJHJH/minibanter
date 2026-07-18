@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'features/recording/native_compositor_gateway.dart';
+import 'features/recording/pigeon_native_compositor_gateway.dart';
+import 'features/recording/recording_controller.dart';
 import 'services/baby_subtitles_api.dart';
 import 'widgets/camera_preview_panel.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://localhost:8000',
+);
+
+const useNativeCompositor = bool.fromEnvironment(
+  'USE_NATIVE_COMPOSITOR',
+  defaultValue: false,
 );
 
 abstract interface class ExportOpener {
@@ -30,6 +38,9 @@ void main() {
       sessionGateway: api,
       exportGateway: api,
       exportOpener: UrlLauncherExportOpener(),
+      nativeRecordingController: useNativeCompositor
+          ? RecordingController(compositor: PigeonNativeCompositorGateway())
+          : null,
     ),
   );
 }
@@ -41,12 +52,14 @@ class BabySubtitlesApp extends StatelessWidget {
     this.exportGateway,
     this.exportOpener,
     this.cameraCapture,
+    this.nativeRecordingController,
   });
 
   final RecordingSessionGateway? sessionGateway;
   final VideoExportGateway? exportGateway;
   final ExportOpener? exportOpener;
   final CameraCapture? cameraCapture;
+  final RecordingController? nativeRecordingController;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +78,7 @@ class BabySubtitlesApp extends StatelessWidget {
         exportGateway: exportGateway,
         exportOpener: exportOpener,
         cameraCapture: cameraCapture,
+        nativeRecordingController: nativeRecordingController,
       ),
     );
   }
@@ -77,12 +91,14 @@ class CameraExperiencePage extends StatefulWidget {
     this.exportGateway,
     this.exportOpener,
     this.cameraCapture,
+    this.nativeRecordingController,
   });
 
   final RecordingSessionGateway? sessionGateway;
   final VideoExportGateway? exportGateway;
   final ExportOpener? exportOpener;
   final CameraCapture? cameraCapture;
+  final RecordingController? nativeRecordingController;
 
   @override
   State<CameraExperiencePage> createState() => _CameraExperiencePageState();
@@ -150,6 +166,10 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
   String? _sessionId;
   String? _exportUrl;
   CameraCapture? _cameraCapture;
+  RecordingController? _nativeRecordingController;
+  bool _isNativePreparing = false;
+  bool _isNativeReady = false;
+  bool _nativeVideoReady = false;
   String _personality = _personalities.first;
   String _language = _languages.first;
   String _regionalStyle = _regionalStyles.first;
@@ -158,9 +178,88 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
   void initState() {
     super.initState();
     _cameraCapture = widget.cameraCapture;
+    _nativeRecordingController = widget.nativeRecordingController;
+    final nativeController = _nativeRecordingController;
+    if (nativeController != null) {
+      _prepareNativeCompositor(nativeController);
+    }
+  }
+
+  Future<void> _prepareNativeCompositor(RecordingController controller) async {
+    setState(() {
+      _isNativePreparing = true;
+      _isNativeReady = false;
+      _errorText = null;
+    });
+    try {
+      await controller.prepare(const NativeCompositorConfig());
+      if (mounted) setState(() => _isNativeReady = true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _errorText = 'Could not prepare native capture. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isNativePreparing = false);
+    }
+  }
+
+  Future<void> _toggleNativeRecording(RecordingController controller) async {
+    setState(() {
+      _isStarting = true;
+      _errorText = null;
+      _nativeVideoReady = false;
+      _completedVideo = null;
+      _exportUrl = null;
+      _sessionId = null;
+    });
+    try {
+      if (_isRecording) {
+        final video = await controller.stopRecording();
+        if (mounted) {
+          setState(() {
+            _isRecording = false;
+            _nativeVideoReady = true;
+            _completedVideo = RecordedVideo.fromPath(video.localPath);
+          });
+        }
+        return;
+      }
+      final session = await widget.sessionGateway?.createRecordingSession(
+        personality: _personality.toLowerCase().replaceAll(' ', '_'),
+        language: _languageCodes[_language]!,
+        regionalStyle: _regionalStyleCodes[_regionalStyle],
+      );
+      await controller.startRecording();
+      await controller.scheduleCaption(
+        id: 'opening-caption',
+        text: _caption,
+        duration: const Duration(seconds: 3),
+      );
+      if (mounted) {
+        setState(() {
+          _sessionId = session?.id;
+          _isRecording = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _errorText = 'Could not start a native recording. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
+    }
   }
 
   Future<void> _toggleRecording() async {
+    final nativeController = _nativeRecordingController;
+    if (nativeController != null) {
+      await _toggleNativeRecording(nativeController);
+      return;
+    }
     final cameraCapture = _cameraCapture;
     if (cameraCapture == null) {
       setState(
@@ -272,11 +371,14 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            CameraPreviewPanel(
-              onCaptureReady: (capture) {
-                if (mounted) setState(() => _cameraCapture ??= capture);
-              },
-            ),
+            if (_nativeRecordingController == null)
+              CameraPreviewPanel(
+                onCaptureReady: (capture) {
+                  if (mounted) setState(() => _cameraCapture ??= capture);
+                },
+              )
+            else
+              _NativeCompositorPreview(isPreparing: _isNativePreparing),
             Positioned(
               top: 18,
               left: 20,
@@ -289,7 +391,8 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   const SizedBox(height: 10),
-                  if (_isRecording) const _SubtitleOverlay(text: _caption),
+                  if (_isRecording && _nativeRecordingController == null)
+                    const _SubtitleOverlay(text: _caption),
                 ],
               ),
             ),
@@ -353,7 +456,12 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
                           ? 'Stop recording'
                           : 'Start recording',
                       child: FilledButton.icon(
-                        onPressed: _isStarting ? null : _toggleRecording,
+                        onPressed:
+                            _isStarting ||
+                                (_nativeRecordingController != null &&
+                                    !_isNativeReady)
+                            ? null
+                            : _toggleRecording,
                         icon: Icon(
                           _isRecording
                               ? Icons.stop_rounded
@@ -379,10 +487,23 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
                   Text(
                     _isRecording
                         ? 'Recording'
+                        : _isNativePreparing
+                        ? 'Preparing native capture…'
                         : 'Ready to capture a sweet moment',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white),
                   ),
+                  if (_nativeVideoReady) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Native video ready to export',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                   if (_completedVideo != null) ...[
                     const SizedBox(height: 8),
                     FilledButton.icon(
@@ -424,6 +545,29 @@ class _CameraExperiencePageState extends State<CameraExperiencePage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NativeCompositorPreview extends StatelessWidget {
+  const _NativeCompositorPreview({required this.isPreparing});
+
+  final bool isPreparing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFF1E2B2E),
+      child: Center(
+        child: Text(
+          isPreparing
+              ? 'Preparing native camera preview…'
+              : 'Native camera preview is controlled by the compositor.',
+          key: const Key('native-compositor-preview'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white70),
         ),
       ),
     );

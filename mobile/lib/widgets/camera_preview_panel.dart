@@ -13,6 +13,9 @@ class RecordedVideo {
 
   factory RecordedVideo.fromBytes(List<int> bytes) =>
       RecordedVideo(() async => bytes);
+
+  factory RecordedVideo.fromPath(String path) =>
+      RecordedVideo(() => XFile(path).readAsBytes());
 }
 
 class CameraControllerCapture implements CameraCapture {

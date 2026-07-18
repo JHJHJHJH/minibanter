@@ -17,20 +17,26 @@ htmlcov/
 venv/
 env/
 
-# Flutter and Dart generated files
-mobile/.dart_tool/
-mobile/.packages
-mobile/.pub-cache/
-mobile/.flutter-plugins
-mobile/.flutter-plugins-dependencies
-mobile/build/
-mobile/android/.gradle/
-mobile/android/app/.cxx/
-mobile/ios/Pods/
-mobile/ios/.symlinks/
-mobile/ios/Flutter/ephemeral/
-mobile/ios/Runner.xcworkspace/xcuserdata/
-mobile/ios/Runner.xcodeproj/xcuserdata/
+# Flutter, Dart, Android, and iOS generated files
+**/.dart_tool/
+**/.packages
+**/.pub-cache/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/.gradle/
+**/.cxx/
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/xcuserdata/
+**/local.properties
+**/key.properties
+*.keystore
+*.jks
+
+# Agent-local plans and task artifacts
+.hermes/
 
 # IDE and OS files
 .idea/
